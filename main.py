@@ -1,5 +1,4 @@
-import requests,json,time,re,os,configparser
-import urllib.parse
+import requests,json,time,re,os,configparser,urllib.parse,threading
 
 apiHeaders = {
   'Host': 'tuanapi.12355.net',
@@ -83,7 +82,7 @@ else:
     exit('+================+\n| member未定义！ |\n+================+')
 
 #清除所有空字符并以|或换行符分割字符串创建列表
-if re.search('\|',member):
+if re.search('|',member):
     memberlist=(("".join(member.split()))).split('|')
 else:
     memberlist=(member.replace(' ','').rstrip('\n').split('\n'))
@@ -122,6 +121,43 @@ def t():
 def islimited(XLToken):
     headers['X-Litemall-Token']=XLToken
     return(json.loads(requests.get('https://youthstudy.12355.net/saomah5/api/young/score/status',headers=headers).text)['data']['entity']['scoreStatus'])
+
+def LearningChannel(i):
+    id = i['id']
+    channelName = i['channelName']
+    print('正在学习：',channelName)
+    # channelNow='<b>'+channelName+':</b>'
+    
+    params = {
+        'channelId': id,
+        'pageSize': '999',#提高pageSize以获得全部元素
+        'time': t(),
+    }
+    if islimited(xLitemallToken) == False:
+        getarticle = requests.get('https://youthstudy.12355.net/saomah5/api/article/get/channel/article', params=params, headers=headers)
+        articleslist = json.loads(getarticle.text).get('data').get('entity').get('articlesList')
+        addScore_output=''
+        availableArticles=0
+        msg=''
+        for articles in articleslist:
+            if articles['scoreStatus'] == False:
+                params = {
+                    'id': articles['id'],
+                }
+                addScore = requests.get('https://youthstudy.12355.net/saomah5/api/article/addScore', params=params, headers=headers)
+                msg+=json.loads(addScore.text).get('msg')
+                addScore_output+=json.loads(addScore.text).get('msg')
+                availableArticles+=1
+        if availableArticles==0:
+            print(channelName,'无可供学习内容')
+            addScore_output+='无可供学习内容'
+        else:
+            print(channelName,msg)
+    else:
+        print(channelName,'达到每日积分限制，跳过执行')
+        addScore_output='达到每日积分限制，跳过执行'
+    # channel_output+=channelNow+addScore_output
+    channel_output[channelName]=addScore_output
 
 output_list=[]
 if __name__ == '__main__':
@@ -180,42 +216,14 @@ if __name__ == '__main__':
             print('\n=====学习频道=====')
             channel_output={}
             if config['study']['studychannel'] == 'yes':
+                threadlist=[]
                 for i in channelList:
-                    id = i['id']
-                    channelName = i['channelName']
-                    print(channelName,end='：')
-                    # channelNow='<b>'+channelName+':</b>'
-                    
-                    params = {
-                        'channelId': id,
-                        'pageSize': '999',#提高pageSize以获得全部元素
-                        'time': t(),
-                    }
-                    if islimited(xLitemallToken) == False:
-                        getarticle = requests.get('https://youthstudy.12355.net/saomah5/api/article/get/channel/article', params=params, headers=headers)
-                        articleslist = json.loads(getarticle.text).get('data').get('entity').get('articlesList')
-                        addScore_output=''
-                        availableArticles=0
-                        for articles in articleslist:
-                            if articles['scoreStatus'] == False:
-                                params = {
-                                    'id': articles['id'],
-                                }
-                                addScore = requests.get('https://youthstudy.12355.net/saomah5/api/article/addScore', params=params, headers=headers)
-                                print(json.loads(addScore.text).get('msg'),end='')
-                                addScore_output+=json.loads(addScore.text).get('msg')
-                                availableArticles+=1
-                        if availableArticles==0:
-                            print('无可供学习内容')
-                            addScore_output+='无可供学习内容'
-                        else:
-                            print('')
-                    else:
-                        print('达到每日积分限制，跳过执行')
-                        addScore_output='达到每日积分限制，跳过执行'
-                    # channel_output+=channelNow+addScore_output
-                    channel_output[channelName]=addScore_output
-
+                    a=threading.Thread(target=LearningChannel,args=(i,))
+                    a.start()
+                    threadlist.append(a)
+                for a in  threadlist:
+                    a.join()
+                
                 # channel_output=channel_output.rstrip('<br>')
             else:
                 channel_output='跳过执行'
